@@ -47,7 +47,7 @@ public class ExcelCalculation {
      */
     private enum ErrorMessageEnum {
         NAME_ERROR("#NAME?"), ENDLESS_LOOP("#ENDLESS_LOOP?"), FORMULA_ERROR("#FORMULA_ERROR?"),
-        ERROR("#ERROR?");
+        BY_ZERO_ERROR("#DIV/0!"), ERROR("#ERROR?");
 
         private final String text;
         ErrorMessageEnum(final String text){
@@ -69,14 +69,17 @@ public class ExcelCalculation {
 //            {"=A6*A3"}
 //    };
     static String[][] table = {
-            {null, "=A0+2", "3"},
-            {"=A1", null, "=B2"},
-            {"3", "IF(AND(A3<A4, 1%<2, 3 < 5 * 103%), MIN(A3, A4), 0%)"},
-            {"=A6+A5"},
-            {"5"},
-            {"6"},
-            {"=A6*A3"}
+            {null, "=B2+2", "3", "=D1"},
+            {"=A1", null, "=B2", "=E1"},
+            {"3.3", "=IF(AND(A3<A4, 1%<2, 3 < 5 * 103%), MIN(A3, A4), 0%)"},
+            {"=A6+A5", "=SUM(A1:A5)", "=RANK(A1,A1:B5)", "=RANK(A3,(A2,A3,A4), 1)", "=RANK(0,(A2,A3,A4), 1)"},
+            {"5", "=SUM(A1:C3)", "=(SUM(A7,A3,C1)-A7)*2", "=SUM(A7+A8)"},
+            {"6", "-(-3/0)", "-(-3)*3+2)+4/2", "=B6", "=ABS(-3.4343+MAX(C1,A3,A1))", "-3/2"},
+            {"=A6*A3", "=10%/3 + IF(OR(A7<1,A1<0,A3<4),IF(AND(A5<6,A7<3), MAX(A3,3), MIN(A3, 3)), MIN(3,5%))"}
     };
+//    static String[][] table = {
+//            {"=B4"}
+//    };
 //    =RANK(E54,(E54,I54,K54,L54),0)
 //    =RANK(F24,$F$24:$N$24,0)     最后一个参数可以省略， =RANK(F24,$F$24:$N$24)
 //    =SUM(E2,F2,G2)
@@ -147,7 +150,7 @@ public class ExcelCalculation {
                     if("(".equals(opStack.peek())){
                         opStack.pop();
                         break;
-                    } else if (opStack.peek().matches(FORMULA_REGEX)) {
+                    } else if ("-(".equals(opStack.peek()) || opStack.peek().matches(FORMULA_REGEX)) {
                         suffixList.add(opStack.pop());
                         break;
                     } else {
@@ -261,6 +264,7 @@ public class ExcelCalculation {
                 if ("-".equals(str)) {
                     // 负号
                     list.add("-(");
+                    index++;
                 } else {
                     // 匹配不到，则抛异常
                     if ("".equals(str)) {
@@ -504,7 +508,7 @@ public class ExcelCalculation {
                                 lists.add(explain(table[x][y]));
                                 // 由于数组没有赋初值，导致数据越界，则为该数据赋初值为零
                             } catch (IndexOutOfBoundsException e) {
-                                System.out.println("数组越界");
+                                System.out.println("索引越界");
                                 lists.add("0");
                             }
                         }
@@ -533,7 +537,11 @@ public class ExcelCalculation {
                         res = num1.multiply(num2);
                         break;
                     case "/":
-                        res = num1.divide(num2, DIGITS, ROUNDING_MODE);
+                        try {
+                            res = num1.divide(num2, DIGITS, ROUNDING_MODE);
+                        } catch (ArithmeticException e) {
+                            throw new Exception(ErrorMessageEnum.BY_ZERO_ERROR.toString());
+                        }
                         break;
                     default:
                         throw new RuntimeException("运算符错误：" + item);
@@ -602,8 +610,16 @@ public class ExcelCalculation {
                 // 递归
                 a = explain(s);
                 table[row][column] = table[row][column] == null ? null : a;
-            } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+            } catch (NumberFormatException e) {
+                System.out.println("数字类型错误");
                 throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
+            } catch (ArrayIndexOutOfBoundsException e) {
+                if (row >= 0 && row < table.length) {
+                    a = "0";
+                } else {
+                    System.out.println("数组越界");
+                    throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
+                }
             }
             // 数值
         } else if (s.matches(NUMBER_REGEX)) {
@@ -649,7 +665,14 @@ public class ExcelCalculation {
         BigDecimal sum = BigDecimal.ZERO;
         for(int i=x1;i<=x2;i++) {
             for(int j=y1;j<=y2;j++) {
-                sum = sum.add(new BigDecimal(explain(table[i][j])));
+                try {
+                    sum = sum.add(new BigDecimal(explain(table[i][j])));
+                } catch (IndexOutOfBoundsException e) {
+                    if (i < 0) {
+                        System.out.println("单元名称不能位字母加零");
+                        throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
+                    }
+                }
             }
         }
         return sum;
@@ -715,7 +738,7 @@ public class ExcelCalculation {
         for (int i=0; i<table.length; i++) {
             for (int j=0; j<table[i].length; j++) {
                 try {
-                    if (table[i][j].contains("RANK(")) {
+                    if (table[i][j].contains("-(-(3)*3+2)+4/2")) {
                         System.out.println(table[i][j]);
                     }
                     table[i][j] = table[i][j] == null ? null : explain(table[i][j]);
