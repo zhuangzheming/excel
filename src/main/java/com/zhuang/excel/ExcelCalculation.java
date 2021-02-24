@@ -54,7 +54,9 @@ public class ExcelCalculation {
 //    private static int separateRow = 2;//3;
 //    private static int separateColumn = 5;
 
-    // 循环次数，避免死循环
+    /**
+     * 循环次数，避免死循环
+     */
     private static int cycleNum = 0;
 
     /**
@@ -87,11 +89,11 @@ public class ExcelCalculation {
             {null, "=B2+2", "-3", "=D1"},
             {"=A1", null, "=B2", "=E1"},
             {"3.3", "=IF(AND(A3<A4, 1%<2, 3 < 5 * 103%), MIN(A3, A4), 0%)"},
-            {"=A6+A5", "=SUM(A1:A5)", "=RANK(A1,A1:B5)", "=RANK(A2,A1:B5, 1)", "=RANK(C3,(A2,A1, B2, C3,A4), 0)", "=RANK(B3,(A2,A1, B2, B3,A4), 0)","=RANK(0,(A2,A3,A4), 1)"},
+            {"=A6+A5", "=SUM(A1:A5)", "=RANK(A1,A1:B5)", "=RANK(A2,A1:B5, 1)", "=RANK(B5,(C3,A4), 0)", "=RANK(C1,(A2,A1, B2, C1,A4), 0)","=RANK(0,(A2,A3,A4), 1)"},
             {"5", "=SUM(A1:C3)", "=(SUM(A7,A3,C1)-A7)*2", "=SUM(A7+A8)", "=SUM(A1, A1:C1, B1:C1, C1)"},
             {"6", "-(-3/0)", "-(-(3)*3+2)+4/2", "=B6", "=ABS(-3.4343+MAX(C1,A3,A1))", "-3/2"},
             {"=A6*A3", "=10%/3 + IF(OR(A7<1,A1<0,A3<4),IF(AND(A5<6,A7<3), MAX(A3,3), MIN(A3, 3)), MIN(3,5%))"},
-            {"=IF(OR(1<2, 3>3), 1, 2)", "IF(79<(4+4), 3, 4)", "79<(4+4)"}
+            {"=IF(OR(1<2, 3>3), 1, 2)", "IF(79<(4+4), 3, 4)", "79<(4+4)", "=RANK(B1,(A1:A2, C1, B1:B3, A3, A4), 0)"}
     };
 //    static String[][] table = {
 //            {"=SUM(1,B1:C1,3)", "1", "2", "=SUM(A1,A1:C1,B1:C1, C1)"}
@@ -438,11 +440,7 @@ public class ExcelCalculation {
                                     System.out.println("SUM公式错误");
                                     throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
                                 }
-                                int row = Integer.parseInt(start.substring(1))-1-separateRow;
-                                int column = start.charAt(0)-65-separateColumn;
-                                int row2 = Integer.parseInt(end.substring(1))-1-separateRow;
-                                int column2 = end.charAt(0)-65-separateColumn;
-                                BigDecimal sumTmp = getSum(row, column, row2, column2);
+                                BigDecimal sumTmp = getSum(start, end);
                                 lists.add(sumTmp.toString());
                                 j++;
                             } else {
@@ -457,69 +455,7 @@ public class ExcelCalculation {
                         stack.push(sum + "");
                         break;
                     case "RANK(":
-                        int rank = 0;
-                        lists = new LinkedList<>();
-                        if(stack.search(":") == -1) {
-                            for (int j=0; j<count; ) {
-                                if(",".equals(stack.peek())) {
-                                    count ++;
-                                    stack.pop();
-                                } else {
-                                    lists.add(stack.pop());
-                                    j++;
-                                }
-                            }
-                            String firstStr = lists.get(lists.size() - 1);
-                            lists.remove(lists.size() - 1);
-                            String endStr = lists.get(0);
-                            String rankWay = "";
-                            if (!endStr.matches(CEIl_REGEX)) {
-                                rankWay = lists.get(0);
-                                lists.remove(0);
-                            }
-
-                            rank = getRank(firstStr, lists, rankWay);
-                            // RANK(A1,A1:A2) 形式
-                        } else  {
-                            String rankWay = "";
-                            // RANK(A1,A1:A2,0) 形式
-                            if (stack.size() == 7) {
-                                stack.pop();
-                                rankWay = stack.pop();
-                            }
-                            removeComma(stack);
-                            stack.pop();
-                            String end = stack.pop();
-                            String start = stack.pop();
-                            if (!start.matches(CEIl_REGEX) || !end.matches(CEIl_REGEX)) {
-                                System.out.println("RANK公式错误");
-                                throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
-                            }
-
-                            String firstStr = explain(stack.pop(), true);
-                            if (firstStr == null) {
-                                throw new Exception(ErrorMessageEnum.N_A_ERROR.toString());
-                            }
-                            int row = Integer.parseInt(start.substring(1))-1-separateRow;
-                            int column = start.charAt(0)-65-separateColumn;
-                            int row2 = Integer.parseInt(end.substring(1))-1-separateRow;
-                            int column2 = end.charAt(0)-65-separateColumn;
-                            for(int x=row; x<=row2; x++) {
-                                for(int y=column; y<=column2; y++) {
-                                    // 该单元格没有赋初值，则不参与排名计算
-                                    try {
-                                        if (table[x][y] != null) {
-                                            lists.add(explain(table[x][y]));
-                                        }
-                                    } catch (IndexOutOfBoundsException e) {
-                                        System.out.println("索引越界");
-                                    }
-                                }
-                            }
-                            rank = getRank(firstStr, lists, rankWay);
-                        }
-
-                        stack.push(rank + "");
+                        getRank(stack);
                         break;
                     default:
                         //是操作符，取出栈顶两个元素
@@ -622,8 +558,8 @@ public class ExcelCalculation {
         // 某单元格的值
         if (s.matches(CEIl_REGEX)) {
             try {
-                row = Integer.parseInt(s.substring(1))-1-separateRow;
-                column = s.charAt(0)-65-separateColumn;
+                row = getRow(s);
+                column = getColumn(s);
                 s = table[row][column];
                 // 递归
                 a = explain(s, isReturnNull);
@@ -694,6 +630,31 @@ public class ExcelCalculation {
         return result;
     }
 
+    /**
+     * 该单元格的处于数组的第几行
+     * @param s
+     * @return
+     */
+    private static int getRow(String s) {
+        return Integer.parseInt(s.substring(1)) - 1 - separateRow;
+    }
+    /**
+     * 该单元格的处于数组的第几列
+     * @param s
+     * @return
+     */
+    private static int getColumn(String s) {
+        return s.charAt(0) - 65 - separateColumn;
+    }
+    
+    public static BigDecimal getSum(String start, String end) throws Exception {
+        int x1 = getRow(start);
+        int y1 = getColumn(start);
+        int x2 = getRow(end);
+        int y2 = getColumn(end);
+        return getSum(x1, y1, x2, y2);
+    }
+
     public static BigDecimal getSum(int x1,int y1,int x2,int y2) throws Exception {
         BigDecimal sum = BigDecimal.ZERO;
         for(int i=x1;i<=x2;i++) {
@@ -716,6 +677,75 @@ public class ExcelCalculation {
         BigDecimal avg = getSum(x1, y1, x2, y2).divide(BigDecimal.valueOf(count), DIGITS, ROUNDING_MODE);
         return avg;
     }
+
+    /**
+     * 获取该区域的所有单元格的值
+     * @param start
+     * @param end
+     * @return
+     * @throws Exception
+     */
+    private static List<String> getSelectedCeilValueList(String start, String end) throws Exception {
+        List<String> lists = new LinkedList<>();
+        int row = getRow(start);
+        int column = getColumn(start);
+        int row2 = getRow(end);
+        int column2 = getColumn(end);
+        for(int x = row; x <= row2; x++) {
+            for(int y = column; y <= column2; y++) {
+                // 该单元格没有赋初值，则不参与排名计算
+                try {
+                    if (table[x][y] != null) {
+                        lists.add(explain(table[x][y]));
+                    }
+                } catch (IndexOutOfBoundsException e) {
+                    System.out.println("索引越界");
+                }
+            }
+        }
+        return lists;
+    }
+    
+    private static void getRank(Stack<String> stack) throws Exception {
+        // 排位方式
+        String rankWay = "";
+        List<String> lists = new LinkedList<>();
+        // 逗号个数+1
+        int count = 1;
+        for (int j=0; j<count; ) {
+            if(",".equals(stack.peek())) {
+                count ++;
+                stack.pop();
+            } else if (":".equals(stack.peek())) {
+                stack.pop();
+                String end = stack.pop();
+                String start = stack.pop();
+                if (!start.matches(CEIl_REGEX) || !end.matches(CEIl_REGEX)) {
+                    System.out.println("RANK公式错误");
+                    throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
+                }
+                List<String> ceilList = getSelectedCeilValueList(start, end);
+                lists.addAll(ceilList);
+                
+                j++;
+            } else {
+                lists.add(stack.pop());
+                j++;
+            }
+        }
+
+        String firstStr = lists.get(lists.size() - 1);
+        lists.remove(lists.size() - 1);
+        String endStr = lists.get(0);
+        if (!endStr.matches(CEIl_REGEX)) {
+            rankWay = lists.get(0);
+            lists.remove(0);
+        }
+
+        int rank = getRank(firstStr, lists, rankWay);
+        stack.push(rank + "");
+    }
+    
     /**
      * 获取某个单元格（或数值）在某个范围内的排名，该单元格（或数值）必须在该范围里
      * @param str 某个单元格（或数值）
@@ -738,12 +768,16 @@ public class ExcelCalculation {
         if (rankWay != null && !"".equals(rankWay) && !"0".equals(rankWay)) {
             compareNum = 1;
         }
-        // 该单元格排是否在引用中
+        // 该单元格值是否在引用中
         boolean isExist = false;
         // 排名
         int rank = 1;
         for (int i = 0; i < list.size(); i++) {
-            BigDecimal currentDecimal = new BigDecimal(explain(list.get(i)));
+            String searchResult = explain(list.get(i), true);
+            if (searchResult == null) {
+                continue;
+            }
+            BigDecimal currentDecimal = new BigDecimal(searchResult);
             if (tmp.equals(currentDecimal)) {
                 isExist = true;
             }
@@ -753,7 +787,7 @@ public class ExcelCalculation {
         }
         if (!isExist) {
             System.out.println("排名：数值不在该范围内");
-            throw new Exception(ErrorMessageEnum.ERROR.toString());
+            throw new Exception(ErrorMessageEnum.N_A_ERROR.toString());
         }
         return rank;
     }
@@ -779,9 +813,9 @@ public class ExcelCalculation {
         for (int i=0; i<table.length; i++) {
             for (int j=0; j<table[i].length; j++) {
                 try {
-                    if (table[i][j].contains("RANK(C3,(A2,A1, B2, C3,A4), 0)")) {
-                        System.out.println(table[i][j]);
-                    }
+//                    if (table[i][j].contains("=RANK(B5,(A2,A1, B2, C3,A4), 0)")) {
+//                        System.out.println(table[i][j]);
+//                    }
                     table[i][j] = table[i][j] == null ? null : explain(table[i][j]);
                 } catch (Exception e) {
                     System.out.println(table[i][j] + "公式：" + e.getMessage());
