@@ -7,6 +7,7 @@ import java.util.regex.Pattern;
 
 /**
  * excel公式计算 包含 加减乘除 负号 单个百分号 IF AND OR MIN MAX SUM RANK
+ * 未 AVG（在excel为 AVERAGE）、COUNT、=SUM(B1:B2,B1:B2,3)
  */
 public class ExcelCalculation {
     /**
@@ -68,18 +69,21 @@ public class ExcelCalculation {
 //            {"6"},
 //            {"=A6*A3"}
 //    };
-    static String[][] table = {
-            {null, "=B2+2", "3", "=D1"},
-            {"=A1", null, "=B2", "=E1"},
-            {"3.3", "=IF(AND(A3<A4, 1%<2, 3 < 5 * 103%), MIN(A3, A4), 0%)"},
-            {"=A6+A5", "=SUM(A1:A5)", "=RANK(A1,A1:B5)", "=RANK(A3,(A2,A3,A4), 1)", "=RANK(0,(A2,A3,A4), 1)"},
-            {"5", "=SUM(A1:C3)", "=(SUM(A7,A3,C1)-A7)*2", "=SUM(A7+A8)"},
-            {"6", "-(-3/0)", "-(-3)*3+2)+4/2", "=B6", "=ABS(-3.4343+MAX(C1,A3,A1))", "-3/2"},
-            {"=A6*A3", "=10%/3 + IF(OR(A7<1,A1<0,A3<4),IF(AND(A5<6,A7<3), MAX(A3,3), MIN(A3, 3)), MIN(3,5%))"}
-    };
 //    static String[][] table = {
-//            {"=B4"}
+//            {null, "=B2+2", "3", "=D1"},
+//            {"=A1", null, "=B2", "=E1"},
+//            {"3.3", "=IF(AND(A3<A4, 1%<2, 3 < 5 * 103%), MIN(A3, A4), 0%)"},
+//            {"=A6+A5", "=SUM(A1:A5)", "=RANK(A1,A1:B5)", "=RANK(A3,(A2,A3,A4), 1)", "=RANK(0,(A2,A3,A4), 1)"},
+//            {"5", "=SUM(A1:C3)", "=(SUM(A7,A3,C1)-A7)*2", "=SUM(A7+A8)"},
+//            {"6", "-(-3/0)", "-(-3)*3+2)+4/2", "=B6", "=ABS(-3.4343+MAX(C1,A3,A1))", "-3/2"},
+//            {"=A6*A3", "=10%/3 + IF(OR(A7<1,A1<0,A3<4),IF(AND(A5<6,A7<3), MAX(A3,3), MIN(A3, 3)), MIN(3,5%))"}
 //    };
+    static String[][] table = {
+            {"=SUM(1,B1:C1,3)", "1", "2", "=SUM(A1,A1:C1,B1:C1, C1)"}
+    };
+//    =COUNT(A1,A2) 为null或不存在（包括未赋值） 记为零
+//  AVERAGE(A1:A5, 5)
+//  AVERAGE(A1:A5)
 //    =RANK(E54,(E54,I54,K54,L54),0)
 //    =RANK(F24,$F$24:$N$24,0)     最后一个参数可以省略， =RANK(F24,$F$24:$N$24)
 //    =SUM(E2,F2,G2)
@@ -141,7 +145,7 @@ public class ExcelCalculation {
             }else if(item.matches(REGEX3)){
                 //是数字则直接入队
                 suffixList.add(item);
-            }else if("(".equals(item) || ",".equals(item) || isFunOperator(item) || item.matches(REGEX2)){
+            }else if("(".equals(item) || ":".equals(item) || ",".equals(item) || isFunOperator(item) || item.matches(REGEX2)){
                 //是左括号，压栈
                 opStack.push(item);
             }else if(")".equals(item)){
@@ -211,12 +215,14 @@ public class ExcelCalculation {
             return 0;
         } else if (op.matches("^[<>]=?|=")) {
             return -1;
-        } else if (op.matches(",")) {
+        } else if (op.matches(":")) {
             return -2;
-        } else if (op.matches("\\(") || op.matches("\\)") || isFunOperator(op)) {
+        }  else if (op.matches(",")) {
             return -3;
+        } else if (op.matches("\\(") || op.matches("\\)") || isFunOperator(op)) {
+            return -4;
         }
-        return -4;
+        return -5;
     }
 
     /**
@@ -429,33 +435,33 @@ public class ExcelCalculation {
             } else if (item.equals("SUM(")) {
                 BigDecimal sum = BigDecimal.ZERO;
                 List<String> lists = new LinkedList<>();
-                if(",".equals(stack.peek())) {
-                    for (int j=0; j<count; ) {
-                        if(",".equals(stack.peek())) {
-                            count ++;
-                            stack.pop();
-                        } else {
-                            lists.add(stack.pop());
-                            j++;
+
+                for (int j=0; j<count; ) {
+                    if(",".equals(stack.peek())) {
+                        count ++;
+                        stack.pop();
+                    } else if (":".equals(stack.peek())) {
+                        stack.pop();
+                        String end = stack.pop();
+                        String start = stack.pop();
+                        if (!start.matches(CEIl_REGEX) || !end.matches(CEIl_REGEX)) {
+                            System.out.println("SUM公式错误");
+                            throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
                         }
+                        int row = Integer.parseInt(start.substring(1))-1-separateRow;
+                        int column = start.charAt(0)-65-separateColumn;
+                        int row2 = Integer.parseInt(end.substring(1))-1-separateRow;
+                        int column2 = end.charAt(0)-65-separateColumn;
+                        BigDecimal sumTmp = getSum(row, column, row2, column2);
+                        lists.add(sumTmp.toString());
+                        j++;
+                    } else {
+                        lists.add(stack.pop());
+                        j++;
                     }
-                    for (int j=lists.size()-1; j>=0; j--) {
-                        sum = sum.add(new BigDecimal(explain(lists.get(j))));
-                    }
-                    // SUM(A1:A2) 形式
-                } else  {
-                    String end = stack.pop();
-                    stack.pop();
-                    String start = stack.pop();
-                    if (!start.matches(CEIl_REGEX) || !end.matches(CEIl_REGEX)) {
-                        System.out.println("SUM公式错误");
-                        throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
-                    }
-                    int row = Integer.parseInt(start.substring(1))-1-separateRow;
-                    int column = start.charAt(0)-65-separateColumn;
-                    int row2 = Integer.parseInt(end.substring(1))-1-separateRow;
-                    int column2 = end.charAt(0)-65-separateColumn;
-                    sum = getSum(row, column, row2, column2);
+                }
+                for (int j=lists.size()-1; j>=0; j--) {
+                    sum = sum.add(new BigDecimal(explain(lists.get(j))));
                 }
 
                 stack.push(sum + "");
@@ -678,6 +684,11 @@ public class ExcelCalculation {
         return sum;
     }
 
+    public static BigDecimal getAvg(int x1,int y1,int x2,int y2) throws Exception {
+        int count = Math.abs((x2-x1+1)*(y2-y1+1));
+        BigDecimal avg = getSum(x1, y1, x2, y2).divide(BigDecimal.valueOf(count), DIGITS, ROUNDING_MODE);
+        return avg;
+    }
     /**
      * 获取某个单元格（或数值）在某个范围内的排名，该单元格（或数值）必须在该范围里
      * @param str 某个单元格（或数值）
