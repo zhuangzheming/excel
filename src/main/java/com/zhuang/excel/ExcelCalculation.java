@@ -27,7 +27,7 @@ public class ExcelCalculation {
     /**
      * 单元格名
      */
-    private static final String CEIl_REGEX = "^[A-Z]\\d{1,2}";
+    private static final String CEIL_REGEX = "^[A-Z]\\d{1,2}";
     /**
      * 函数公式或比较符号
      */
@@ -36,10 +36,6 @@ public class ExcelCalculation {
      * 函数公式名称
      */
     private static final String FORMULA_REGEX = "^[A-Z]+\\(";
-    /**
-     * 含百分比的数字
-     */
-    private static final String REGEX4 = "^\\d+%";
     /**
      * 除法，保留小数位数
      */
@@ -62,10 +58,30 @@ public class ExcelCalculation {
     private static String[][] table;
 
     /**
+     * 左括号
+     */
+    private static final String LEFT_BRACKET = "(";
+    /**
+     * 右括号
+     */
+    private static final String RIGHT_BRACKET = ")";
+    /**
+     * 冒号
+     */
+    private static final String COLON = ":";
+    /**
+     * 逗号
+     */
+    private static final String COMMA = ",";
+    /**
+     * RANK公式的排名方式 降序
+     */
+    private static final String RANK_WAY_DESC = "0";
+    /**
      * 转成后缀表达式
      *
-     * @param expressionList
-     * @return
+     * @param expressionList 前缀表达式
+     * @return 后缀表达式
      */
     private static List<String> parseToSuffixExpression(List<String> expressionList) {
         //创建一个栈用于保存操作符
@@ -76,12 +92,12 @@ public class ExcelCalculation {
             //得到数或操作符
             if (isOperator(item)) {
                 //是操作符 判断操作符栈是否为空
-                if (opStack.isEmpty() || "(".equals(opStack.peek()) || priority(item) > priority(opStack.peek())) {
+                if (opStack.isEmpty() || LEFT_BRACKET.equals(opStack.peek()) || priority(item) > priority(opStack.peek())) {
                     //为空或者栈顶元素为左括号或者当前操作符大于栈顶操作符直接压栈
                     opStack.push(item);
                 } else {
                     //否则将栈中元素出栈如队，直到遇到大于当前操作符或者遇到左括号时或者其他函数公式
-                    while (!opStack.isEmpty() && !"(".equals(opStack.peek())) {
+                    while (!opStack.isEmpty() && !LEFT_BRACKET.equals(opStack.peek())) {
                         if (priority(item) <= priority(opStack.peek())) {
                             suffixList.add(opStack.pop());
                         } else {
@@ -94,13 +110,13 @@ public class ExcelCalculation {
             } else if (item.matches(REGEX3)) {
                 //是数字则直接入队
                 suffixList.add(item);
-            } else if ("(".equals(item) || ":".equals(item) || ",".equals(item) || isFunOperator(item) || item.matches(REGEX2)) {
+            } else if (LEFT_BRACKET.equals(item) || COLON.equals(item) || COMMA.equals(item) || isFunOperator(item) || item.matches(REGEX2)) {
                 //是左括号，压栈
                 opStack.push(item);
-            } else if (")".equals(item)) {
+            } else if (RIGHT_BRACKET.equals(item)) {
                 //是右括号 ，将栈中元素弹出入队，直到遇到左括号或者函数公式，左括号出栈，但不入队,函数公式出栈且入队。
                 while (!opStack.isEmpty()) {
-                    if ("(".equals(opStack.peek())) {
+                    if (LEFT_BRACKET.equals(opStack.peek())) {
                         opStack.pop();
                         break;
                     } else if ("-(".equals(opStack.peek()) || opStack.peek().matches(FORMULA_REGEX)) {
@@ -111,8 +127,6 @@ public class ExcelCalculation {
                     }
                 }
             } else if (".".equals(item)) {
-                suffixList.add(item);
-            } else if (":".equals(item)) {
                 suffixList.add(item);
             } else {
                 throw new RuntimeException("有非法字符：" + item);
@@ -128,18 +142,18 @@ public class ExcelCalculation {
     /**
      * 判断字符串是否为基础操作符，包含逗号
      *
-     * @param op
-     * @return
+     * @param op 字符
+     * @return 是否
      */
     private static boolean isOperator(String op) {
-        return op.equals("+") || op.equals("-") || op.equals("*") || op.equals("/") || op.equals(",");
+        return "+".equals(op) || "-".equals(op) || "*".equals(op) || "/".equals(op) || COMMA.equals(op);
     }
 
     /**
      * 判断字符串是否为特殊操作符
      *
-     * @param op
-     * @return
+     * @param op 字符
+     * @return 是否
      */
     private static boolean isFunOperator(String op) {
         return op.matches("^-\\(") || op.matches("^[A-Z]+\\(");
@@ -148,8 +162,8 @@ public class ExcelCalculation {
     /**
      * 判断是否为数字
      *
-     * @param num
-     * @return
+     * @param num 字符
+     * @return 是否
      */
     private static boolean isNumber(String num) {
         return num.matches("^-?([0-9]{1,}[.][0-9]*)$") || num.matches("^-?([0-9]{1,})$");
@@ -157,10 +171,8 @@ public class ExcelCalculation {
 
     /**
      * 获取操作符的优先级
-     *
-     * @param op
-     * @return
      */
+    @SuppressWarnings("all")
     private static int priority(String op) {
         if (op.equals("*") || op.equals("/")) {
             return 1;
@@ -168,9 +180,9 @@ public class ExcelCalculation {
             return 0;
         } else if (op.matches("^[<>]=?|=")) {
             return -1;
-        } else if (op.matches(":")) {
+        } else if (op.matches(COLON)) {
             return -2;
-        } else if (op.matches(",")) {
+        } else if (op.matches(COMMA)) {
             return -3;
         } else if (op.matches("\\(") || op.matches("\\)") || isFunOperator(op)) {
             return -4;
@@ -180,10 +192,8 @@ public class ExcelCalculation {
 
     /**
      * 将表达式转为list
-     *
-     * @param expression
-     * @return
      */
+    @SuppressWarnings("uncheck")
     private static List<String> expressionToList(String expression) throws Exception {
         expression = expression.replaceAll(" ", "");
         int index = 0;
@@ -240,9 +250,6 @@ public class ExcelCalculation {
 
     /**
      * 根据后缀表达式list计算结果
-     *
-     * @param list
-     * @return
      */
     private static String calculate(List<String> list) throws Exception {
         Stack<String> stack = new Stack<>();
@@ -259,8 +266,8 @@ public class ExcelCalculation {
                     case "ABS(":
                         getNotOrAbs(stack, item);
                         break;
-                    case ",":
-                    case ":":
+                    case COMMA:
+                    case COLON:
                         stack.push(item);
                         break;
                     case "MIN(":
@@ -317,14 +324,13 @@ public class ExcelCalculation {
     }
 
     /**
-     * 过滤栈顶的逗号
+     * 过滤栈顶的逗号 返回非逗号的栈顶值
      *
-     * @param stack
-     * @return 非逗号的栈顶值
+     * @param stack 栈
      */
     private static void removeComma(Stack stack) throws Exception {
         try {
-            if (",".equals(stack.peek())) {
+            if (COMMA.equals(stack.peek())) {
                 stack.pop();
             }
         } catch (EmptyStackException e) {
@@ -384,7 +390,7 @@ public class ExcelCalculation {
             s = s.replaceAll("\\$", "");
         }
         // 某单元格的值
-        if (s.matches(CEIl_REGEX)) {
+        if (s.matches(CEIL_REGEX)) {
             try {
                 row = getRow(s);
                 column = getColumn(s);
@@ -495,10 +501,9 @@ public class ExcelCalculation {
                 try {
                     sum = sum.add(new BigDecimal(explain(table[i][j])));
                 } catch (IndexOutOfBoundsException e) {
-                    if (i < 0) {
-                        System.out.println("单元名称不能位字母加零");
-                        throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
-                    }
+                    // 当i < 0(即：单元名称不能用字母加小于等于零的数值)
+                    System.out.println("单元名称不能用字母加小于等于零的数值");
+                    throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
                 }
             }
         }
@@ -573,7 +578,7 @@ public class ExcelCalculation {
         }
 
         for (int j = 0; j < count; ) {
-            if (",".equals(stack.peek())) {
+            if (COMMA.equals(stack.peek())) {
                 count++;
                 stack.pop();
             } else {
@@ -614,7 +619,7 @@ public class ExcelCalculation {
         // 逗号个数+1
         int count = 1;
         for (int j = 0; j < count; ) {
-            if (",".equals(stack.peek())) {
+            if (COMMA.equals(stack.peek())) {
                 count++;
                 stack.pop();
             } else {
@@ -664,14 +669,14 @@ public class ExcelCalculation {
         // 逗号个数+1
         int count = 1;
         for (int j = 0; j < count; ) {
-            if (",".equals(stack.peek())) {
+            if (COMMA.equals(stack.peek())) {
                 count++;
                 stack.pop();
-            } else if (":".equals(stack.peek())) {
+            } else if (COLON.equals(stack.peek())) {
                 stack.pop();
                 String end = stack.pop();
                 String start = stack.pop();
-                if (!start.matches(CEIl_REGEX) || !end.matches(CEIl_REGEX)) {
+                if (!start.matches(CEIL_REGEX) || !end.matches(CEIL_REGEX)) {
                     System.out.println("SUM公式错误");
                     throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
                 }
@@ -697,14 +702,14 @@ public class ExcelCalculation {
         // 逗号个数+1
         int count = 1;
         for (int j = 0; j < count; ) {
-            if (",".equals(stack.peek())) {
+            if (COMMA.equals(stack.peek())) {
                 count++;
                 stack.pop();
-            } else if (":".equals(stack.peek())) {
+            } else if (COLON.equals(stack.peek())) {
                 stack.pop();
                 String end = stack.pop();
                 String start = stack.pop();
-                if (!start.matches(CEIl_REGEX) || !end.matches(CEIl_REGEX)) {
+                if (!start.matches(CEIL_REGEX) || !end.matches(CEIL_REGEX)) {
                     System.out.println("RANK公式错误");
                     throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
                 }
@@ -721,7 +726,7 @@ public class ExcelCalculation {
         String firstStr = lists.get(lists.size() - 1);
         lists.remove(lists.size() - 1);
         String endStr = lists.get(0);
-        if (!endStr.matches(CEIl_REGEX)) {
+        if (!endStr.matches(CEIL_REGEX)) {
             rankWay = lists.get(0);
             lists.remove(0);
         }
@@ -736,7 +741,7 @@ public class ExcelCalculation {
      * @param str     某个单元格（或数值）
      * @param list    引用（某些单元格）
      * @param rankWay 排位方式，为空或为0，降序， 其他，升序。
-     * @return
+     * @return 排名
      */
     private static Integer getRank(String str, List<String> list, String rankWay) throws Exception {
         str = explain(str, true);
@@ -750,7 +755,7 @@ public class ExcelCalculation {
         BigDecimal tmp = new BigDecimal(str);
         // 比较大小，根据排位方式，选择大于或小于来进行排名比较, -1 降序，1 升序。
         int compareNum = -1;
-        if (rankWay != null && !"".equals(rankWay) && !"0".equals(rankWay)) {
+        if (rankWay != null && !"".equals(rankWay) && !RANK_WAY_DESC.equals(rankWay)) {
             compareNum = 1;
         }
         // 该单元格值是否在引用中
@@ -784,13 +789,15 @@ public class ExcelCalculation {
 
     /**
      * excel计算公式
-     * @param strArray
+     * @param table 计算的数组
      * @param separateRow 公式的 单元格名称，跟现在的数组的行数差
      * @param separateColumn 公式的 单元格名称，跟现在的数组的列数差
-     * @return
+     * @return String[][]
      */
-    public static String[][] excel(String[][] strArray, int separateRow, int separateColumn) {
-        table = strArray;
+    public static String[][] excel(String[][] table, int separateRow, int separateColumn) {
+        ExcelCalculation.table = table;
+        ExcelCalculation.separateRow = separateRow;
+        ExcelCalculation.separateColumn = separateColumn;
         for (int i = 0; i < table.length; i++) {
             for (int j = 0; j < table[i].length; j++) {
                 try {
