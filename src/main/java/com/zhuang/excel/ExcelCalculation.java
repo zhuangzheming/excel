@@ -502,6 +502,7 @@ public class ExcelCalculation {
                     sum = sum.add(new BigDecimal(explain(table[i][j])));
                 } catch (IndexOutOfBoundsException e) {
                     // 当i < 0(即：单元名称不能用字母加小于等于零的数值)
+                    assert (i > table.length && j > table[i].length) : (char)(j  + separateColumn + 65) + "" + (i + separateRow + 1)  + " 单元格未赋值";
                     System.out.println("单元名称不能用字母加小于等于零的数值");
                     throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
                 }
