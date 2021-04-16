@@ -53,7 +53,7 @@ public class ExcelCalculation {
     /**
      * 循环次数，避免死循环
      */
-    private static int cycleNum = 0;
+    private static Set cycleSet = new HashSet();
 
     private static String[][] table;
 
@@ -375,11 +375,6 @@ public class ExcelCalculation {
             }
         }
 
-        cycleNum++;
-        if (cycleNum == 250) {
-            // 程序死循环
-            throw new Exception(ErrorMessageEnum.ENDLESS_LOOP.toString());
-        }
         String a;
         int row = 0;
         int column = 0;
@@ -389,14 +384,23 @@ public class ExcelCalculation {
             // 去除$ 符号
             s = s.replaceAll("\\$", "");
         }
-        // 某单元格的值
+        // 判断是什么类型
         if (s.matches(CEIL_REGEX)) {
+            // 单元格名称
             try {
                 row = getRow(s);
                 column = getColumn(s);
                 s = table[row][column];
                 // 递归
-                a = explain(s, isReturnNull);
+                try {
+                    a = explain(s, isReturnNull);
+                } catch (Exception e) {
+                    if (!table[row][column].contains("#")) {
+                        System.out.println(table[row][column] + "公式：" + e.getMessage());
+                        table[row][column] = e.getMessage();
+                    }
+                    throw new Exception(e.getMessage());
+                }
                 table[row][column] = table[row][column] == null ? null : a;
             } catch (NumberFormatException e) {
                 System.out.println("数字类型错误");
@@ -413,12 +417,20 @@ public class ExcelCalculation {
                     throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
                 }
             }
-            // 数值
         } else if (s.matches(NUMBER_REGEX)) {
+            // 数值
             a = s;
-            // 公式
         } else {
+            // 公式
+            if (cycleSet.contains(s)) {
+                cycleSet.clear();
+                // 程序死循环
+//                return ErrorMessageEnum.ENDLESS_LOOP.toString();
+                throw new Exception(ErrorMessageEnum.ENDLESS_LOOP.toString());
+            }
+            cycleSet.add(s);
             a = formula(s);
+            cycleSet.clear();
         }
 
         return a;
@@ -783,7 +795,62 @@ public class ExcelCalculation {
         return rank;
     }
 
+    /**
+     * 验证公式
+     * 括号对称验证（左右括号是否成对），某些公式是否连续（如：加减）
+     * 是否包含规定之外的函数名称（需要么？）
+     * @param clac
+     * @throws Exception
+     */
+    private static void verifyFormula(String clac) throws Exception {
+        isValid(clac);
+//        clac
+    }
 
+
+    /**
+     * 括号匹配验证
+     * @param s
+     * @return
+     */
+    private static boolean isValid(String s) {
+        if (s == null || s.length() == 0) {
+            return false;
+        }
+        Stack stack = new Stack();
+        for(int i = 0; i<s.length(); i++) {
+            char letter = s.charAt(i);
+            switch(letter) {
+                case '(':
+                case '{':
+                case '[':
+                    stack.push(letter);
+                    break;
+                case ')':
+                    if(!"(".equals(stack.pop())) {
+                        return false;
+                    }
+                case '}':
+                    if(!"{".equals(stack.pop())) {
+                        return false;
+                    }
+                case ']':
+                    if(!"[".equals(stack.pop()))  {
+                        return false;
+                    }
+                default:
+                    break;
+            }
+        }
+        return stack.size() == 0;
+    }
+
+    /**
+     * excel 计算公式
+     * 行列偏移量都为零
+     * @param strArray
+     * @return
+     */
     public static String[][] excel(String[][] strArray) {
         return excel(strArray, 0, 0);
     }
@@ -805,12 +872,16 @@ public class ExcelCalculation {
 //                    if (table[i][j].contains("=RANK(B5,(A2,A1, B2, C3,A4), 0)")) {
 //                        System.out.println(table[i][j]);
 //                    }
+
+                    // 验证公式
+                    verifyFormula(table[i][j]);
                     table[i][j] = table[i][j] == null ? null : explain(table[i][j]);
                 } catch (Exception e) {
-                    System.out.println(table[i][j] + "公式：" + e.getMessage());
-                    table[i][j] = e.getMessage();
+                    if (!table[i][j].contains("#")) {
+                        System.out.println(table[i][j] + "公式~~：" + e.getMessage());
+                        table[i][j] = e.getMessage();
+                    }
                 }
-                cycleNum = 0;
             }
         }
         return table;
