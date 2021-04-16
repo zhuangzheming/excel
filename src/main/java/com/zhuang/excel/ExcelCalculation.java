@@ -877,6 +877,7 @@ public class ExcelCalculation {
                     verifyFormula(table[i][j]);
                     table[i][j] = table[i][j] == null ? null : explain(table[i][j]);
                 } catch (Exception e) {
+                    // 是否是已经处理过的单元格，“#”为异常消息ErrorMessageEnum：名称都以“#”开头
                     if (!table[i][j].contains("#")) {
                         System.out.println(table[i][j] + "公式~~：" + e.getMessage());
                         table[i][j] = e.getMessage();
