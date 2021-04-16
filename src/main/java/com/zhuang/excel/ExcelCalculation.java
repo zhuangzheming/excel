@@ -803,7 +803,9 @@ public class ExcelCalculation {
      * @throws Exception
      */
     private static void verifyFormula(String clac) throws Exception {
-        isValid(clac);
+        if (!isValid(clac)) {
+            throw new Exception(ErrorMessageEnum.NAME_ERROR.toString());
+        }
 //        clac
     }
 
